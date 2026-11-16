@@ -108,6 +108,13 @@ def handle_hook(home, payload):
             native_id = payload.get("session_id") or payload.get("thread-id") or payload.get("thread_id")
             if native_id and not (payload.get("agent_id") or payload.get("parent_thread_id")):
                 settings = _read_json(Path(home)/"settings.json", {})
+                from .title_sync import native_identity
+                identity = native_identity(home, native_id, payload=payload)
+                if identity["status"] != "main":
+                    if identity["status"] == "pending":
+                        startup = "本机自动编号身份待核验；本轮未分配编号或改名，后续消息重试。\n"
+                    native_id = None
+            if native_id and not (payload.get("agent_id") or payload.get("parent_thread_id")):
                 row = registry.ensure(thread_id=native_id, host=settings.get("registry_host", "local"),
                                       source="Codex lifecycle hook actual native session identity")
                 from .title_sync import synchronize
@@ -207,11 +214,12 @@ def notify(home, payload):
                 and not (payload.get("agent_id") or payload.get("parent_thread_id"))):
             uuid.UUID(native_id)
             from .session_registry import SessionRegistry
-            from .title_sync import synchronize
-            row = SessionRegistry(Store(home)).ensure(
-                thread_id=native_id, host=settings.get("registry_host", "local"),
-                source="Codex completion native thread identity")
-            synchronize(home, row, source="Codex agent-turn-complete")
+            from .title_sync import native_identity, synchronize
+            if native_identity(home, native_id, payload=payload)["status"] == "main":
+                row = SessionRegistry(Store(home)).ensure(
+                    thread_id=native_id, host=settings.get("registry_host", "local"),
+                    source="Codex completion native thread identity")
+                synchronize(home, row, source="Codex agent-turn-complete")
     except Exception as exc:
         _best_effort_log(home, exc)
     try:

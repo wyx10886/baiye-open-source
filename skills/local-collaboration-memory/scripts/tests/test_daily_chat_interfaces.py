@@ -142,7 +142,8 @@ class DailyChatInterfaceTests(unittest.TestCase):
     def test_hook_annotations_follow_the_bound_native_id_and_never_auto_adopt_another_chat(self):
         self.daily.bind(**self.payload())
         before = self.daily.show()
-        with patch("local_memory.title_sync.synchronize", return_value={"status": "ok"}) as sync:
+        with patch("local_memory.title_sync.synchronize", return_value={"status": "ok"}) as sync, \
+             patch("local_memory.title_sync.native_identity", return_value={"status": "main"}):
             matched = handle_hook(self.home, {"hook_event_name": "UserPromptSubmit",
                                               "session_id": "current", "prompt": "continue"})
             context = matched["hookSpecificOutput"]["additionalContext"]

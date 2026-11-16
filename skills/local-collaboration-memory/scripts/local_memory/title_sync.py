@@ -6,11 +6,13 @@ Only metadata for the native thread being handled is read.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from contextlib import closing
 import json
 import os
 from pathlib import Path
 import queue
 import shutil
+import sqlite3
 import subprocess
 import threading
 import time
@@ -23,6 +25,110 @@ from . import __version__
 
 class HostTitleError(RuntimeError):
     """A metadata RPC failed; raw server output is deliberately not retained."""
+
+
+def _source_kind(source):
+    """Classify host metadata; unknown origins never imply a user thread."""
+    if isinstance(source, str):
+        try:
+            parsed = json.loads(source)
+        except (ValueError, TypeError):
+            parsed = source
+        if parsed != source:
+            return _source_kind(parsed)
+        label = source.replace("_", "").replace("-", "").lower()
+        if label.startswith("subagent"):
+            return "subagent"
+        if label in {"cli", "vscode", "exec", "appserver"}:
+            return "main"
+    elif isinstance(source, dict):
+        if any(str(key).replace("_", "").lower() == "subagent" for key in source):
+            return "subagent"
+    return "pending"
+
+
+def native_identity(home, native_id, *, payload=None):
+    """Gate numbering using exact local Codex metadata, without host writes.
+
+    Read only the matching thread's source fields from the latest host index,
+    or its first session_meta record. Missing or unknown metadata stays pending.
+    Titles, working directories and previous allocations do not prove identity.
+    """
+    from .integration import _atomic, _read_json
+
+    result = {"thread_id": native_id, "status": "pending", "evidence": "unavailable"}
+    try:
+        if str(uuid.UUID(native_id)) != native_id.lower():
+            return dict(result, evidence="unsupported_identity")
+    except (ValueError, TypeError, AttributeError):
+        return dict(result, evidence="unsupported_identity")
+    payload = payload or {}
+    if payload.get("agent_id") or payload.get("parent_thread_id"):
+        return dict(result, status="subagent", evidence="explicit_parent")
+    try:
+        settings = _read_json(Path(home) / "settings.json", {})
+        if settings.get("registry_host", "local") != "local":
+            return dict(result, evidence="unsupported_host")
+        config = settings.get("host_title_sync", {})
+        host_home = Path(config.get("codex_home") or Path.home() / ".codex").expanduser().resolve()
+        databases = sorted((p for p in host_home.glob("state_*.sqlite") if p.stem[6:].isdigit()),
+                           key=lambda p: int(p.stem[6:]), reverse=True)
+        indexed_rollout = None
+        if databases:
+            # Never resurrect stale identity metadata from an older host index.
+            try:
+                with closing(sqlite3.connect(databases[0].as_uri() + "?mode=ro", uri=True, timeout=0.3)) as con:
+                    columns = {r[1] for r in con.execute("PRAGMA table_info(threads)")}
+                    fields = [f for f in ("source", "thread_source", "attached_thread_parent_id", "rollout_path")
+                              if f in columns]
+                    row = con.execute("SELECT " + ",".join(fields) + " FROM threads WHERE id=?", (native_id,)).fetchone() if "id" in columns and fields else None
+                    if row is not None:
+                        metadata = dict(zip(fields, row))
+                        kind = _source_kind(metadata.get("source"))
+                        if (metadata.get("thread_source") == "subagent" or metadata.get("attached_thread_parent_id")
+                                or kind == "subagent"):
+                            result.update(status="subagent", evidence="runtime_index")
+                        elif metadata.get("thread_source") == "user" or kind == "main":
+                            result.update(status="main", evidence="runtime_index")
+                        indexed_rollout = metadata.get("rollout_path")
+            except (OSError, sqlite3.Error):
+                pass
+        if result["status"] == "pending":
+            candidates = [Path(indexed_rollout)] if indexed_rollout else []
+            candidates += list((host_home / "sessions").glob("*/*/*/*" + native_id + "*.jsonl"))[:64]
+            candidates += list((host_home / "archived_sessions").glob("*" + native_id + "*.jsonl"))[:64]
+            for path in candidates:
+                path = path.resolve()
+                session_roots = (host_home / "sessions", host_home / "archived_sessions")
+                if (not path.is_relative_to(host_home) or path.suffix != ".jsonl"
+                        or native_id not in path.name
+                        or not any(path.is_relative_to(root) for root in session_roots)
+                        or not path.is_file()):
+                    continue
+                with path.open("rb") as stream:
+                    line = stream.readline(65537)
+                if len(line) > 65536:
+                    continue
+                record = json.loads(line)
+                metadata = record.get("payload", {})
+                if record.get("type") != "session_meta" or metadata.get("id") != native_id:
+                    continue
+                kind = _source_kind(metadata.get("source"))
+                # A user-created fork is not itself evidence of a subagent.
+                if metadata.get("parent_thread_id"):
+                    kind = "subagent"
+                if kind != "pending":
+                    result.update(status=kind, evidence="rollout_session_meta")
+                    break
+    except (OSError, sqlite3.Error, ValueError, TypeError, AttributeError):
+        # Keep diagnostics free of raw metadata, local paths and host errors.
+        pass
+    try:
+        _atomic(Path(home) / "identity-sync" / (native_id + ".json"), json.dumps(
+            dict(result, checked_at=datetime.now(timezone.utc).isoformat()), ensure_ascii=False, indent=2) + "\n")
+    except (OSError, ValueError):
+        pass
+    return result
 
 
 class TitleClient:
@@ -136,6 +242,9 @@ def synchronize(home, row, *, source):
         uuid.UUID(native_id)
     except (ValueError, TypeError, AttributeError):
         return {"status": "unsupported_identity"}
+    identity = native_identity(home, native_id)
+    if identity["status"] != "main":
+        return {"status": "identity_pending" if identity["status"] == "pending" else "skipped_subagent"}
     status = {"code": row["code"], "thread_id": native_id,
               "checked_at": datetime.now(timezone.utc).isoformat(), "source": source,
               "status": "pending", "changed": False}

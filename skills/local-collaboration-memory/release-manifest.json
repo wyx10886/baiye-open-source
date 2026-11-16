@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "skill": "local-collaboration-memory",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "scope": "Reviewed UTF-8 source only; manifest excluded from its own hashes",
   "files": [
     {
@@ -21,8 +21,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 2186,
-      "sha256": "4601f3347b05378b7989c9f70710d248502e365e91cb066780efa78718e324a4"
+      "bytes": 2450,
+      "sha256": "709104fcb37596122e30dec89f9c020780787423688a947dce4e7c573fcf8c11"
     },
     {
       "path": "SKILL.md",
@@ -37,7 +37,7 @@
     {
       "path": "pyproject.toml",
       "bytes": 588,
-      "sha256": "d58a50a176582eb2ff607541031d0b7be62d8c923830b0f19354ebdbd02f5a45"
+      "sha256": "6ce421ccda340c59e14da46c1eaffaa363a795ba836ae34c9a1f801d3c70987e"
     },
     {
       "path": "references/operations.md",
@@ -46,18 +46,18 @@
     },
     {
       "path": "references/privacy.md",
-      "bytes": 3517,
-      "sha256": "39ea5c442586237b6436ef806a3d01573e2adca3d1fe05eb296747d9f18f746b"
+      "bytes": 4286,
+      "sha256": "f844988fa2cce6814938974513f4814150daf729600355a089fb185e6f7a7654"
     },
     {
       "path": "references/setup.md",
-      "bytes": 4066,
-      "sha256": "cabae7d4256047047c85d88ab92452776aa4189bc1ff1514a6d723b3ea169df3"
+      "bytes": 4502,
+      "sha256": "f323ddedff7b26c416df038fb898064af9dc95df0706dd3dcf9b0c39deee4819"
     },
     {
       "path": "scripts/audit_release.py",
       "bytes": 7787,
-      "sha256": "2ace7445acf44820032282b09419e5f95295a326e4a1cf672c86fe87343eafb6"
+      "sha256": "227d2a688c0a63896fb9a29f13abdb801ea5250dabbb1e9d7749f1569aa6a003"
     },
     {
       "path": "scripts/entry.py",
@@ -72,7 +72,7 @@
     {
       "path": "scripts/local_memory/__init__.py",
       "bytes": 75,
-      "sha256": "b031abe6bd01e12e70ea6c9fb7002dda3e1d5c47ff23ddb8a5f12a666b1d7ee5"
+      "sha256": "f8d5fefb64fda77c49cc299db6e9864270d7f77071c4f55911dcd4c7bc661697"
     },
     {
       "path": "scripts/local_memory/__main__.py",
@@ -96,8 +96,8 @@
     },
     {
       "path": "scripts/local_memory/integration.py",
-      "bytes": 22400,
-      "sha256": "21c08c628d02925303e4efa3099cc56150338dec6cbe040be2effe413b22d9e9"
+      "bytes": 23018,
+      "sha256": "2ca7c9defad9432e2c8412dd1547a6502d2e2bc4a39eccc77667247d27c3b1f0"
     },
     {
       "path": "scripts/local_memory/launcher.py",
@@ -131,8 +131,8 @@
     },
     {
       "path": "scripts/local_memory/title_sync.py",
-      "bytes": 7505,
-      "sha256": "6736121063bb7280fee00280bd5fb32d9cb2fdf6c5ea1563f7dd3d7f5fa7ec71"
+      "bytes": 13300,
+      "sha256": "6ed1626bfa8bba5aa760b799de28a80608378dfbe55a79f59c55aef777d6b943"
     },
     {
       "path": "scripts/local_memory/web.py",
@@ -151,8 +151,13 @@
     },
     {
       "path": "scripts/tests/test_daily_chat_interfaces.py",
-      "bytes": 8644,
-      "sha256": "eb09714fd345e29e079d7d7e0936ac647d0609262809991efc33332aa7121cf7"
+      "bytes": 8742,
+      "sha256": "aba02e7d9d101000db4740df404ec61f811a1f1bbb7965f3fe2be75f3fb2fd6c"
+    },
+    {
+      "path": "scripts/tests/test_identity_filter.py",
+      "bytes": 9693,
+      "sha256": "dde37193748bd7cce95983c7707c309d21937890bc73a33e71d30fc73c4b6f35"
     },
     {
       "path": "scripts/tests/test_importer.py",
@@ -186,8 +191,8 @@
     },
     {
       "path": "scripts/tests/test_session_registry.py",
-      "bytes": 12359,
-      "sha256": "8dc78c94981a154bc48aa5e3451baa806440b0c8d39fd7c9e802cda5b22209b7"
+      "bytes": 12556,
+      "sha256": "b16617849bc53c4a1330082ffb7fa6ae9f5f8d633c9524017c9cdd5a705de730"
     },
     {
       "path": "scripts/tests/test_store.py",
@@ -201,8 +206,8 @@
     },
     {
       "path": "scripts/tests/test_title_sync.py",
-      "bytes": 9761,
-      "sha256": "c92032abb74fc7fa6ed023f442f5021eb8ca340886e89dc3a1da80582791f2db"
+      "bytes": 10157,
+      "sha256": "b1f519a5e122200d3eb77fa2920c9f84d4361e8d3239607befc158bca03ef2cc"
     },
     {
       "path": "scripts/tests/test_web.py",

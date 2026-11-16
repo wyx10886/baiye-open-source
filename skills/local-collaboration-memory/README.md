@@ -1,6 +1,6 @@
 # Local Collaboration Memory
 
-A self-contained agent skill for evidence-backed memory, project handoffs and traceable corrections. Python 3.11+, standard-library runtime, local SQLite, CLI, stdio MCP and a loopback web manager. Public skill version: **1.0.0**.
+A self-contained agent skill for evidence-backed memory, project handoffs and traceable corrections. Python 3.11+, standard-library runtime, local SQLite, CLI, stdio MCP and a loopback web manager. Public skill version: **1.0.1**.
 
 The download contains code and synthetic fixtures. Initialize your own empty private home outside this folder; no personal memory or machine configuration is included.
 
@@ -17,6 +17,8 @@ python -B scripts/entry.py --home ~/.local-collaboration-memory serve --open
 Invoke `$local-collaboration-memory` to set up or use the skill. See [SKILL.md](SKILL.md), [setup](references/setup.md), [operations](references/operations.md) and [privacy](references/privacy.md).
 
 Full host lifecycle integration is optional and changes configuration/hooks/notify. Host title synchronization defaults to disabled. Review-first retention requires explicit workspace enrollment and confirmation of a concrete file list. No periodic job is preinstalled.
+
+Version 1.0.1 verifies local host session metadata before automatic session numbering, skips child agents and leaves unknown identities pending. This read-only check also runs when title synchronization is disabled; see the privacy reference for its exact scope.
 
 ## Verify the source
 

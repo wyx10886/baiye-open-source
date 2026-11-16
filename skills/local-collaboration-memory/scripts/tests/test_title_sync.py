@@ -1,8 +1,10 @@
 """Regression coverage for automatic titles, not just registry suggestions."""
 import io
+from contextlib import closing
 import json
 from pathlib import Path
 import subprocess
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -46,6 +48,11 @@ class TitleSyncTests(unittest.TestCase):
         self.settings = {"host_title_sync": {"enabled": True, "binary": sys.executable,
                                               "codex_home": str(Path(self.temp.name) / "codex")}}
         (self.home / "settings.json").write_text(json.dumps(self.settings), encoding="utf-8")
+        host_home = Path(self.settings["host_title_sync"]["codex_home"])
+        host_home.mkdir()
+        with closing(sqlite3.connect(host_home / "state_5.sqlite")) as con, con:
+            con.execute("CREATE TABLE threads (id TEXT PRIMARY KEY, source TEXT)")
+            con.execute("INSERT INTO threads VALUES(?,?)", (self.native_id, "vscode"))
 
     def sync(self, client):
         with patch("local_memory.title_sync.TitleClient", return_value=client):

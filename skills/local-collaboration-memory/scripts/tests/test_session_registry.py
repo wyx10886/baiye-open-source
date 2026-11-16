@@ -9,6 +9,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 from local_memory.integration import handle_hook
 from local_memory.mcp import MCPServer
@@ -165,6 +166,9 @@ class SessionRegistryTests(unittest.TestCase):
 
     def test_hook_registers_identity_without_guessing_project_from_title(self):
         self.project("alpha")
+        identity = patch("local_memory.title_sync.native_identity", return_value={"status": "main"})
+        identity.start()
+        self.addCleanup(identity.stop)
         result = handle_hook(self.home, {"hook_event_name":"UserPromptSubmit", "session_id":"actual-session", "cwd":str(self.root), "prompt":"alpha"})
         row = self.registry.show(thread_id="actual-session")
         self.assertEqual(row["code"], "A00")

@@ -50,6 +50,8 @@ This backs up changed files in the private home, adds a managed MCP block, prese
 
 Title synchronization is disabled by default. It can be explicitly enabled in the private home's `settings.json` using `host_title_sync.enabled=true`, a local `codex` binary path and the intended `codex_home`. Read `scripts/local_memory/title_sync.py` and verify host compatibility before opting in. The adapter uses the local app-server and cannot serve as a portable guarantee of title changes across hosts.
 
+Automatic session numbering checks local host identity metadata even with title sync disabled. Configure the intended `host_title_sync.codex_home` when using a nondefault host home. The check reads the exact session's source metadata, skips child agents and defers unknown identities without allocating a code. See [privacy](privacy.md) for the read boundaries. An unavailable or incompatible host index does not prove a main session.
+
 For an initial smoke test, use temporary memory and Codex homes so no live host settings are changed. `doctor` checks static integration/storage details; it does not establish scheduler health or actual future hook execution.
 
 ## Optional Python package
