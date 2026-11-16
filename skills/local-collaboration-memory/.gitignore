@@ -1,0 +1,26 @@
+# Runtime data belongs outside this source-only skill.
+.local/
+*.sqlite*
+*.db
+*.db-*
+*.log
+*.py[cod]
+__pycache__/
+*.egg-info/
+build/
+dist/
+.venv/
+.env
+.env.*
+auth.json
+settings.json
+runtime.json
+config.toml
+hooks.json
+installation.json
+previous-notify.json
+backups/
+recycle/
+处理记录/
+PERSONA.md
+user-memory.md

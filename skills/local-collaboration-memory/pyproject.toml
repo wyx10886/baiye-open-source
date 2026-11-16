@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "local-collaboration-memory"
+version = "1.0.0"
+description = "Evidence-backed local collaboration memory and project handoffs"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+dependencies = []
+
+[project.scripts]
+local-memory = "local_memory.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "scripts"}
+
+[tool.setuptools.packages.find]
+where = ["scripts"]
+include = ["local_memory*"]
+
+[tool.setuptools.package-data]
+local_memory = ["static/*.html"]

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Local Collaboration Memory"
+  short_description: "Evidence-backed local memory and project handoffs"
+  default_prompt: "Use $local-collaboration-memory to set up durable local memory and resume an explicitly selected project."

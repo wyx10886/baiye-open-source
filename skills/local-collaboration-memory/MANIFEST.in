@@ -1,0 +1,8 @@
+include SKILL.md README.md LICENSE pyproject.toml MANIFEST.in release-manifest.json .gitignore
+recursive-include agents *.yaml
+recursive-include references *.md
+recursive-include scripts *.py *.html
+global-exclude *.pyc *.pyo *.sqlite *.sqlite3 *.db *.log
+prune scripts/__pycache__
+prune scripts/local_memory/__pycache__
+prune scripts/tests/__pycache__
