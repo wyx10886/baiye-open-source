@@ -40,16 +40,16 @@ class DailyChatTests(unittest.TestCase):
 
     def test_create_and_rebind_preserve_native_codes_and_provenance(self):
         self.register("old-native")
-        for index in range(1, 9):
+        for index in range(1, 4):
             self.register(f"native-{index}")
         sessions_before = self.registry.list()
-        self.assertEqual(self.registry.show(thread_id="native-8")["code"], "A08")
-        first = self.bind("native-8")
+        self.assertEqual(self.registry.show(thread_id="native-3")["code"], "A03")
+        first = self.bind("native-3")
         self.assertTrue(first["configured"])
         self.assertTrue(first["sync"]["ok"])
         self.assertEqual(first["entry_code"], "A00")
-        self.assertEqual(first["current_session"]["code"], "A08")
-        self.assertEqual(first["current_session"]["thread_id"], "native-8")
+        self.assertEqual(first["current_session"]["code"], "A03")
+        self.assertEqual(first["current_session"]["thread_id"], "native-3")
         self.assertEqual(first["current_session"]["observed_title"], "Observed native title")
         self.assertIsNone(first["history"][0]["previous_session"])
         self.assertEqual(first["history"][0]["source"], "fixture explicit user selection")
@@ -60,12 +60,12 @@ class DailyChatTests(unittest.TestCase):
         second = self.bind("replacement-native", revision=1, title="Daily continuation")
         self.assertEqual(second["revision"], 2)
         self.assertEqual(second["created_at"], first["created_at"])
-        self.assertEqual(second["current_session"]["code"], "A09")
-        self.assertEqual(second["history"][1]["previous_session"]["code"], "A08")
-        self.assertEqual(second["history"][1]["new_session"]["code"], "A09")
+        self.assertEqual(second["current_session"]["code"], "A04")
+        self.assertEqual(second["history"][1]["previous_session"]["code"], "A03")
+        self.assertEqual(second["history"][1]["new_session"]["code"], "A04")
         self.assertEqual(second["history"][1]["previous_title"], "Daily conversation")
         self.assertEqual(second["history"][1]["new_title"], "Daily continuation")
-        self.assertEqual(self.registry.show("A08")["thread_id"], "native-8")
+        self.assertEqual(self.registry.show("A03")["thread_id"], "native-3")
         self.assertEqual(self.registry.show("A00")["thread_id"], "old-native")
 
     def test_idempotent_binding_does_not_duplicate_history_or_source(self):

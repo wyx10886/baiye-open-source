@@ -1,4 +1,4 @@
-include SKILL.md README.md LICENSE pyproject.toml MANIFEST.in release-manifest.json .gitignore
+include SKILL.md README.md CHANGELOG.md LICENSE pyproject.toml MANIFEST.in release-manifest.json .gitignore
 recursive-include agents *.yaml
 recursive-include references *.md
 recursive-include scripts *.py *.html

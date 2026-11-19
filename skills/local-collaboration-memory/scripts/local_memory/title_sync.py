@@ -28,7 +28,7 @@ class HostTitleError(RuntimeError):
 
 
 def _source_kind(source):
-    """Classify host metadata; unknown origins never imply a user thread."""
+    """Classify host metadata only; an unknown enum is never assumed to be user work."""
     if isinstance(source, str):
         try:
             parsed = json.loads(source)
@@ -48,11 +48,12 @@ def _source_kind(source):
 
 
 def native_identity(home, native_id, *, payload=None):
-    """Gate numbering using exact local Codex metadata, without host writes.
+    """Gate automatic numbering using exact local Codex metadata, without host writes.
 
-    Read only the matching thread's source fields from the latest host index,
-    or its first session_meta record. Missing or unknown metadata stays pending.
-    Titles, working directories and previous allocations do not prove identity.
+    Current hosts expose threads.source/thread_source in their read-only state
+    index. Older hosts can fall back to the first session_meta rollout record.
+    Missing/unknown metadata stays pending and is retried by the next hook.
+    No title, cwd, or previously allocated code is evidence of a user thread.
     """
     from .integration import _atomic, _read_json
 
@@ -75,7 +76,7 @@ def native_identity(home, native_id, *, payload=None):
                            key=lambda p: int(p.stem[6:]), reverse=True)
         indexed_rollout = None
         if databases:
-            # Never resurrect stale identity metadata from an older host index.
+            # Use the newest schema only; do not resurrect a stale identity from an older index.
             try:
                 with closing(sqlite3.connect(databases[0].as_uri() + "?mode=ro", uri=True, timeout=0.3)) as con:
                     columns = {r[1] for r in con.execute("PRAGMA table_info(threads)")}
@@ -88,7 +89,12 @@ def native_identity(home, native_id, *, payload=None):
                         if (metadata.get("thread_source") == "subagent" or metadata.get("attached_thread_parent_id")
                                 or kind == "subagent"):
                             result.update(status="subagent", evidence="runtime_index")
-                        elif metadata.get("thread_source") == "user" or kind == "main":
+                        elif metadata.get("thread_source") in {"user", "agent_created_thread"}:
+                            result.update(status="main", evidence="runtime_index")
+                        elif metadata.get("thread_source") not in (None, ""):
+                            # Explicit non-user thread classes cannot be laundered by a client source.
+                            result.update(status="internal", evidence="runtime_index")
+                        elif kind == "main":
                             result.update(status="main", evidence="runtime_index")
                         indexed_rollout = metadata.get("rollout_path")
             except (OSError, sqlite3.Error):
@@ -114,14 +120,18 @@ def native_identity(home, native_id, *, payload=None):
                 if record.get("type") != "session_meta" or metadata.get("id") != native_id:
                     continue
                 kind = _source_kind(metadata.get("source"))
-                # A user-created fork is not itself evidence of a subagent.
-                if metadata.get("parent_thread_id"):
+                # A fork can be user-owned; forked_from_id alone is not an agent marker.
+                if metadata.get("parent_thread_id") or kind == "subagent":
                     kind = "subagent"
+                elif metadata.get("thread_source") in {"user", "agent_created_thread"}:
+                    kind = "main"
+                elif metadata.get("thread_source") not in (None, ""):
+                    kind = "internal"
                 if kind != "pending":
                     result.update(status=kind, evidence="rollout_session_meta")
                     break
     except (OSError, sqlite3.Error, ValueError, TypeError, AttributeError):
-        # Keep diagnostics free of raw metadata, local paths and host errors.
+        # Fail closed; keep diagnostics free of raw metadata, paths, or host errors.
         pass
     try:
         _atomic(Path(home) / "identity-sync" / (native_id + ".json"), json.dumps(
@@ -242,9 +252,18 @@ def synchronize(home, row, *, source):
         uuid.UUID(native_id)
     except (ValueError, TypeError, AttributeError):
         return {"status": "unsupported_identity"}
+    try:
+        registered = SessionRegistry(Store(home)).show(row["code"])
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        return {"status": "pending", "error_type": type(exc).__name__}
+    if registered.get("retired"):
+        return {"status": "retired"}
+    if registered["thread_id"] != native_id:
+        return {"status": "pending", "error_type": "HostTitleError"}
     identity = native_identity(home, native_id)
     if identity["status"] != "main":
-        return {"status": "identity_pending" if identity["status"] == "pending" else "skipped_subagent"}
+        return {"status": {"pending": "identity_pending", "subagent": "skipped_subagent"}.get(
+            identity["status"], "skipped_internal")}
     status = {"code": row["code"], "thread_id": native_id,
               "checked_at": datetime.now(timezone.utc).isoformat(), "source": source,
               "status": "pending", "changed": False}

@@ -76,6 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
     context = sub.add_parser("context", help="Generate project handoff context with candidates separated")
     context.add_argument("query", nargs="?", default="")
     context.add_argument("--project")
+    context.add_argument("--thread-id", help="Provide the actual current native chat ID to include learned candidates under its use policy")
     context.add_argument("--budget", type=int, default=6000)
     context.add_argument("--include-persona", action="store_true")
     context.add_argument("--markdown", action="store_true", help="Print readable context instead of JSON")
@@ -132,11 +133,32 @@ def build_parser() -> argparse.ArgumentParser:
     update = sessions.add_parser("update", help="JSON operation: ensure/bind/observe-title/title-plan/export/backup")
     update.add_argument("--input", required=True, help="UTF-8 JSON file; '-' reads stdin")
     sessions.add_parser("backup")
+    recycle = sessions.add_parser("recycle", help="Scan reusable numbers, read allocation history, or release verified vacant registrations")
+    recycle.add_argument("--input", required=True, help="UTF-8 JSON operation scan/history/reclaim; reclaim requires source, expected_scan_id, confirmed=true")
     daily = sub.add_parser("daily-chat", help="Separate A00 daily-chat entry; native conversation codes remain stable")
     daily_ops = daily.add_subparsers(dest="daily_action", required=True)
     daily_ops.add_parser("show", help="Read the entry, its current native session and binding history")
     daily_bind = daily_ops.add_parser("bind", help="Point the entry to an already registered native session")
     daily_bind.add_argument("--input", required=True, help="UTF-8 JSON with thread_id/title/source/expected_revision; '-' reads stdin")
+    proactive = sub.add_parser("proactive", help="Opt-in daytime conversation preparation; never sends messages itself")
+    proactive_ops = proactive.add_subparsers(dest="proactive_action", required=True)
+    proactive_ops.add_parser("status", help="Read the policy and preparation attempts, not delivery receipts")
+    for name in ("configure", "evaluate", "claim"):
+        operation = proactive_ops.add_parser(name)
+        operation.add_argument("--input", required=True, help="UTF-8 JSON object; '-' reads stdin")
+    habits = sub.add_parser("habits", help="Review evidence-backed learned habits and manage opt-in learning")
+    habit_ops = habits.add_subparsers(dest="habit_action", required=True)
+    habit_status = habit_ops.add_parser("status", help="Read effective learning policy and counts")
+    habit_status.add_argument("--thread-id")
+    habit_list = habit_ops.add_parser("list", help="List candidate habits; inferred habits are not confirmed preferences")
+    habit_list.add_argument("--scope")
+    habit_list.add_argument("--include-inactive", action="store_true")
+    habit_list.add_argument("--limit", type=int, default=30)
+    habit_show = habit_ops.add_parser("show", help="Read one habit and its attributable evidence")
+    habit_show.add_argument("habit_id")
+    for name in ("configure", "observe", "review", "clear"):
+        operation = habit_ops.add_parser(name)
+        operation.add_argument("--input", required=True, help="UTF-8 JSON object; '-' reads stdin. Management needs source/revision; review and clear also confirmed=true.")
     cleanup = sub.add_parser("cleanup", help="15-day review-first processing-record housekeeping")
     ops = cleanup.add_subparsers(dest="cleanup_action", required=True)
     config = ops.add_parser("configure", help="Explicit managed workspace roots")
@@ -163,8 +185,125 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def dispatch_session_recycling(home: Path, operation: str, **payload):
+    """Use one strict contract for CLI, MCP and HTTP recycling controls."""
+    from .session_registry import SessionRegistry
+    allowed = {
+        "scan": set(),
+        "history": {"code", "thread_id"},
+        "reclaim": {"source", "expected_scan_id", "confirmed"},
+    }
+    required = {"scan": set(), "history": set(), "reclaim": allowed["reclaim"]}
+    if not isinstance(operation, str) or operation not in allowed:
+        raise ValidationError("Unknown session recycling operation")
+    if set(payload) - allowed[operation] or required[operation] - set(payload):
+        raise ValidationError("Session recycling operation has missing or unsupported fields")
+    for field in set(payload) - {"confirmed"}:
+        if not isinstance(payload[field], str) or not payload[field].strip():
+            raise ValidationError(field + " must be nonempty text")
+    if operation == "reclaim" and payload.pop("confirmed") is not True:
+        raise ValidationError("Releasing registrations requires explicit confirmation of the current scan")
+    registry = SessionRegistry(Store(home))
+    if operation == "scan":
+        return registry.recycling_scan()
+    if operation == "history":
+        return registry.recycling_history(**payload)
+    return registry.recycling_reclaim(**payload)
+
+
+def dispatch_habit_operation(home: Path, operation: str, **payload):
+    """Validate each habit operation before forwarding to the learning store."""
+    from .habits import HabitLearning
+    allowed = {
+        "status": {"thread_id"},
+        "list": {"scope", "include_inactive", "limit"},
+        "show": {"habit_id"},
+        "configure": {"enabled", "use_learned", "allow_tool_assisted", "source", "thread_id", "expected_revision"},
+        "observe": {"receipt_id", "topic", "value", "quote", "scope"},
+        "review": {"habit_id", "action", "expected_revision", "source", "value", "confirmed"},
+        "clear": {"source", "expected_revision", "confirmed"},
+    }
+    required = {
+        "status": set(), "list": set(), "show": {"habit_id"},
+        "configure": {"source", "expected_revision"},
+        "observe": {"receipt_id", "topic", "value", "quote"},
+        "review": {"habit_id", "action", "expected_revision", "source", "confirmed"},
+        "clear": {"source", "expected_revision", "confirmed"},
+    }
+    if operation not in allowed:
+        raise ValidationError("Unknown habit operation")
+    if set(payload) - allowed[operation] or required[operation] - set(payload):
+        raise ValidationError("Habit operation has missing or unsupported fields")
+    if operation in {"configure", "review", "clear"}:
+        if not isinstance(payload["source"], str) or not payload["source"].strip():
+            raise ValidationError("Actual user action or confirmation source is required")
+        minimum = 1 if operation == "review" else 0
+        revision = payload["expected_revision"]
+        if type(revision) is not int or revision < minimum:
+            raise ValidationError("Invalid expected_revision; read current policy or habit first")
+    if operation in {"review", "clear"}:
+        if payload.pop("confirmed") is not True:
+            raise ValidationError("This action requires the user's explicit confirmation")
+    if operation == "configure":
+        changes = set(payload) & {"enabled", "use_learned", "allow_tool_assisted"}
+        if not changes or any(type(payload[k]) is not bool for k in changes):
+            raise ValidationError("Provide boolean learning policy changes")
+    if operation == "review":
+        if payload["action"] not in {"confirm", "edit", "reject", "forget"}:
+            raise ValidationError("Unsupported habit review action")
+        if payload["action"] == "edit":
+            if not isinstance(payload.get("value"), str) or not payload["value"].strip():
+                raise ValidationError("Editing a habit requires a nonempty value")
+        elif "value" in payload:
+            raise ValidationError("Only habit editing accepts value")
+    if operation == "list":
+        if "include_inactive" in payload and type(payload["include_inactive"]) is not bool:
+            raise ValidationError("include_inactive must be boolean")
+        if "limit" in payload and (type(payload["limit"]) is not int or not 1 <= payload["limit"] <= 200):
+            raise ValidationError("limit must be between 1 and 200")
+    learning = HabitLearning(home)
+    if operation == "show":
+        return learning.get(payload["habit_id"])
+    if operation == "review":
+        habit_id = payload.pop("habit_id")
+        return learning.review(habit_id, **payload)
+    return getattr(learning, operation)(**payload)
+
+
 def dispatch(args: argparse.Namespace, home: Path):
     command = args.command
+    if command == "habits":
+        if args.habit_action == "status":
+            payload = {"thread_id": args.thread_id} if args.thread_id else {}
+        elif args.habit_action == "list":
+            payload = {"include_inactive": args.include_inactive, "limit": args.limit}
+            if args.scope:
+                payload["scope"] = args.scope
+        elif args.habit_action == "show":
+            payload = {"habit_id": args.habit_id}
+        else:
+            raw = sys.stdin.read() if args.input == "-" else Path(args.input).read_text(encoding="utf-8-sig")
+            payload = json.loads(raw)
+            if not isinstance(payload, dict):
+                raise ValidationError("Habit input must be a JSON object")
+        return dispatch_habit_operation(home, args.habit_action, **payload)
+    if command == "proactive":
+        from .proactive import ProactiveChat
+        proactive = ProactiveChat(home)
+        if args.proactive_action == "status":
+            return proactive.status()
+        raw = sys.stdin.read() if args.input == "-" else Path(args.input).read_text(encoding="utf-8-sig")
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise ValidationError("Proactive input must be a JSON object")
+        if args.proactive_action in {"evaluate", "claim"}:
+            from .daily_chat import DailyChat
+            daily = DailyChat(Store(home)).show()
+            actual_id = (daily.get("current_session") or {}).get("thread_id")
+            if "daily_thread_id" in payload and payload["daily_thread_id"] != actual_id:
+                raise ValidationError("Daily-chat identity must match the current registered entry")
+            payload["daily_thread_id"] = actual_id
+        return getattr(proactive, args.proactive_action)(**payload)
     if command == "cleanup":
         from .retention import Retention
         cleanup = Retention(home)
@@ -239,6 +378,8 @@ def dispatch(args: argparse.Namespace, home: Path):
         payload = json.loads(raw)
         if not isinstance(payload, dict):
             raise ValidationError("Input must be an object with operation and fields")
+        if args.session_action == "recycle":
+            return dispatch_session_recycling(home, **payload)
         return dispatch_registry(store, **payload)
     if command == "project":
         from .work_summary import WorkSummary
@@ -293,7 +434,7 @@ def dispatch(args: argparse.Namespace, home: Path):
         return store.search(args.query, scope=args.scope, include_global=not args.no_global, limit=args.limit,
                             statuses=args.statuses, include_persona=args.include_persona)
     if command == "context":
-        result = store.context(args.query, project=args.project, budget=args.budget, include_persona=args.include_persona)
+        result = store.context(args.query, project=args.project, budget=args.budget, include_persona=args.include_persona, thread_id=args.thread_id)
         if args.markdown:
             print(result["markdown"])
             return None

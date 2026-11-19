@@ -21,8 +21,9 @@
     <div class="side-bottom"><div class="side-note"><span class="status-dot"></span>仅在本机运行<br>SQLite · 可追溯 · 可删除</div></div>
   </aside>
   <main class="workspace">
-    <header class="topbar"><div><div class="eyebrow">CONTINUITY, WITH EVIDENCE</div><h1>把重要的事，接着做好。</h1><p>查看已确认的约定、项目进展与待核实事项。</p></div><div class="top-actions"><button id="sessions-button">会话与目录</button><button id="summary-button">项目工作总结</button><button id="context-button">接续预览</button><button id="backup-button">备份</button><button id="new-button" class="primary">＋ 新增记忆</button></div></header>
+    <header class="topbar"><div><div class="eyebrow">CONTINUITY, WITH EVIDENCE</div><h1>把重要的事，接着做好。</h1><p>查看已确认的约定、项目进展与待核实事项。</p></div><div class="top-actions"><button id="habits-button">习惯学习</button><button id="sessions-button">会话与目录</button><button id="summary-button">项目工作总结</button><button id="context-button">接续预览</button><button id="backup-button">备份</button><button id="new-button" class="primary">＋ 新增记忆</button></div></header>
     <section class="cards" aria-label="记忆概况"><div class="stat"><div class="label">当前有效</div><div class="value" id="active-count">—</div></div><div class="stat"><div class="label">待判断事项</div><div class="value" id="candidate-count">—</div></div><div class="stat"><div class="label">最近复盘</div><div class="value" id="review-date" style="font-size:21px;margin-top:15px">—</div></div></section>
+    <section id="forget-cleanup-notice" class="panel" hidden aria-live="polite" style="margin-bottom:20px"><div class="panel-heading"><h2>学习证据清理尚未完成</h2></div><p class="section-note">记忆正文已经清除，关联的学习证据仍需重试。清理完成后，这条提示会自动移除。</p><div id="forget-cleanup-results" class="result-list"></div></section>
     <section class="panel"><div class="panel-heading"><h2>协作记忆</h2><span id="result-count">正在读取…</span></div>
       <form id="search-form" class="filters"><input id="query" aria-label="搜索记忆" placeholder="搜索重要约定、成果或下一步…"><input id="scope" aria-label="项目范围" value="global" placeholder="global 或 project:项目名"><select id="kind" aria-label="记忆类型"><option value="">所有类型</option><option value="preference">稳定偏好</option><option value="project">项目状态</option><option value="event">历史事件</option><option value="lesson">协作经验</option><option value="persona">虚构设定</option></select><select id="status" aria-label="确认状态"><option value="">所有状态</option><option value="confirmed">已确认</option><option value="candidate">候选</option><option value="unverified">待核实</option></select><button type="submit">检索</button></form>
       <div class="filter-extra"><label><input type="checkbox" id="include-global" checked>项目检索包含全局约定</label><label><input type="checkbox" id="history">查看历史与删除标记</label><button id="all-scopes" style="padding:0;border:0;background:none;font-size:12px;color:var(--green)">浏览所有项目</button></div>
@@ -49,7 +50,25 @@
 <dialog id="context-dialog"><h2>下一次协作，会读到什么</h2><p class="hint">按当前项目范围生成接续摘要。已确认内容与候选事项分别展示。</p><div class="review-row"><input id="context-query" placeholder="输入下一次任务，例如：继续核查数据"><button id="context-run" class="primary">生成摘要</button></div><textarea readonly class="context-output" id="context-output" aria-label="接续摘要"></textarea><div class="dialog-actions"><button id="context-close">关闭</button></div></dialog>
 <dialog id="cleanup-dialog"><h2>核对处理记录</h2><p id="cleanup-path" class="hint"></p><p class="hint">逐项核对用途与依赖后选择。原始资料、脚本和明确受保护文件继续保留。</p><div id="cleanup-files" style="max-height:45vh;overflow:auto"></div><label class="form-field" style="margin-top:15px">清理理由<input id="cleanup-reason" placeholder="说明为什么所选文件已不再需要"></label><div class="dialog-actions"><button id="cleanup-close">取消</button><button id="cleanup-confirm" class="danger">确认回收所选文件</button></div></dialog>
 <dialog id="summary-dialog"><h2>项目工作总结</h2><p class="hint">先看当前进展，再按问题查解决办法。两份文件保存在原项目的处理记录中，长期保留。</p><div class="review-row"><select id="summary-project" aria-label="选择项目"></select><select id="summary-view" aria-label="总结内容"><option value="markdown">工作总结</option><option value="history_markdown">问题与解决记录</option></select><button id="summary-refresh">刷新</button></div><p id="summary-files" class="hint" style="overflow-wrap:anywhere;margin-top:12px"></p><textarea readonly class="context-output" id="summary-output" aria-label="项目工作总结内容"></textarea><div class="dialog-actions"><button id="summary-close">关闭</button></div></dialog>
-<dialog id="sessions-dialog" style="width:min(1000px,94vw)"><h2>会话与目录</h2><p class="hint">固定编号跟随会话，标题可自由修改。A00 → A99 → B00；Z99 → AA00。目录子编号固定，已有路径继续保留。</p><form id="sessions-search" class="review-row"><input id="sessions-query" aria-label="查找会话编号" placeholder="搜索编号、会话名称或文件夹…"><button>查找</button><button type="button" id="sessions-export">更新对应文件</button></form><div id="sessions-results" style="max-height:48vh;overflow:auto;margin-top:16px" aria-live="polite"></div><details style="margin-top:14px"><summary>登记其他平台会话或关联项目</summary><p class="hint" style="margin-top:10px">由助手自动接入的会话会获得编号。手动登记时请使用平台提供的真实会话ID，避免因改名重复建档。</p><form id="session-register-form" class="form-grid"><label class="form-field">平台<input name="platform" value="codex" required></label><label class="form-field">主机标识<input name="host" value="local" required></label><label class="form-field full">真实会话ID<input name="thread_id" required></label><label class="form-field full">当前会话标题<input name="title" required></label><label class="form-field full">核实依据<input name="source" required placeholder="说明会话信息来自哪里"></label><button class="primary" type="submit">分配或查找固定编号</button></form><form id="session-bind-form" class="review-row"><select id="session-bind-code" aria-label="待关联会话"></select><select id="session-bind-project" aria-label="已核实项目"></select><button type="submit">关联此项目</button></form><p class="hint">仅关联已核实的项目目录；不会移动文件。多个会话可以登记同一目录。</p></details><p id="sessions-notice" class="hint" style="margin-top:14px"></p><div class="dialog-actions"><button id="sessions-close">关闭</button></div></dialog>
+<dialog id="sessions-dialog" style="width:min(1000px,94vw)"><h2>会话与目录</h2><p class="hint">现有会话保留编号，标题可自由修改。A00 固定保留；新会话优先使用未占用的最小编号。A99 → B00；Z99 → AA00。目录子编号与已有路径保留。</p><form id="sessions-search" class="review-row"><input id="sessions-query" aria-label="查找会话编号" placeholder="搜索编号、会话名称或文件夹…"><button>查找</button><button type="button" id="sessions-export">更新对应文件</button></form><div id="sessions-results" style="max-height:48vh;overflow:auto;margin-top:16px" aria-live="polite"></div><section aria-labelledby="session-recycling-heading" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
+<h3 id="session-recycling-heading">编号回收</h3><p class="hint">同时核对当前会话、归档会话和工作栈目录；确认均未占用后，才能复用旧编号。只释放旧登记，保留历史记录；不会删除会话或文件。</p>
+<div class="review-row"><button type="button" id="session-recycling-scan">扫描可用编号</button><button type="button" id="session-recycling-reclaim" disabled>释放空闲登记</button></div>
+<p id="session-recycling-status" class="hint" aria-live="polite">点击扫描，查看当前可用编号与保留原因。</p><div id="session-recycling-results" style="max-height:30vh;overflow:auto"></div>
+<details style="margin-top:10px"><summary>查看编号的历史使用记录</summary><form id="session-recycling-history-form" class="review-row"><input id="session-recycling-history-code" aria-label="查询历史编号" placeholder="例如 A06；留空查看全部历史" pattern="[A-Z]+[0-9]{2}" maxlength="14"><button>查历史</button></form><div id="session-recycling-history" style="max-height:25vh;overflow:auto" aria-live="polite"></div></details>
+</section><details style="margin-top:14px"><summary>登记其他平台会话或关联项目</summary><p class="hint" style="margin-top:10px">由助手自动接入的会话会获得编号。手动登记时请使用平台提供的真实会话ID，避免因改名重复建档。</p><form id="session-register-form" class="form-grid"><label class="form-field">平台<input name="platform" value="codex" required></label><label class="form-field">主机标识<input name="host" value="local" required></label><label class="form-field full">真实会话ID<input name="thread_id" required></label><label class="form-field full">当前会话标题<input name="title" required></label><label class="form-field full">核实依据<input name="source" required placeholder="说明会话信息来自哪里"></label><button class="primary" type="submit">分配或查找固定编号</button></form><form id="session-bind-form" class="review-row"><select id="session-bind-code" aria-label="待关联会话"></select><select id="session-bind-project" aria-label="已核实项目"></select><button type="submit">关联此项目</button></form><p class="hint">仅关联已核实的项目目录；不会移动文件。多个会话可以登记同一目录。</p></details><p id="sessions-notice" class="hint" style="margin-top:14px"></p><div class="dialog-actions"><button id="sessions-close">关闭</button></div></dialog>
+<dialog id="habits-dialog" style="width:min(1000px,94vw)">
+  <h2>习惯学习</h2><p class="hint">从你的表达和反复选择中发现可能的偏好。自动发现的内容会标为候选；明确确认的约定优先生效。</p>
+  <div class="review-row"><select id="habits-thread" aria-label="选择学习设置的会话"><option value="">本机默认设置</option></select><button id="habits-refresh">刷新</button></div>
+  <div class="filter-extra" style="padding:18px 0;flex-wrap:wrap">
+    <label><input type="checkbox" id="habits-enabled">自动发现习惯</label>
+    <label><input type="checkbox" id="habits-use">在后续聊天中参考已积累的习惯</label>
+    <label><input type="checkbox" id="habits-tools">允许标记为工具辅助的观察</label>
+  </div><p class="hint">工具辅助观察仍须有你的原话依据；当前不会自动判断整个聊天是否用过工具。</p><p id="habits-policy-note" class="hint" aria-live="polite"></p>
+  <form id="habits-filter" class="review-row"><input id="habits-scope" aria-label="筛选习惯范围" placeholder="全部范围；可填 global 或 project:项目名"><label class="metadata"><input type="checkbox" id="habits-history">包含已拒绝和遗忘标记</label><button>筛选</button></form>
+  <div id="habits-results" style="max-height:48vh;overflow:auto;margin-top:12px" aria-live="polite"></div>
+  <p class="hint" style="margin-top:16px">纠正会重新核对证据；拒绝后不再自动重复收集该项。遗忘会清除这项学习内容及证据，已有独立备份需另行处理。</p>
+  <div class="dialog-actions"><button id="habits-clear" class="danger">清除全部学习内容</button><button id="habits-close">关闭</button></div>
+</dialog>
 <div id="toast" class="toast" hidden role="status"></div>
 <script>
 (()=>{
@@ -62,15 +81,125 @@
   async function api(path,body){const options={headers:{'X-Local-Memory-Token':token}};if(body!==undefined){options.method='POST';options.headers['Content-Type']='application/json';options.body=JSON.stringify(body)}const response=await fetch(path,options);const value=await response.json();if(!response.ok||!value.ok)throw new Error(value.error||'本地服务暂时不可用');return value.data}
   const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n};
   async function refresh(){try{const params=new URLSearchParams({q:$('query').value,scope:$('scope').value.trim()||'global',kind:$('kind').value,status:$('status').value,history:$('history').checked?'1':'0',global:$('include-global').checked?'1':'0'});const [memories,stats]=await Promise.all([api('/api/memories?'+params),api('/api/stats')]);rows=memories;render();const active=stats.active??stats.active_count??(typeof stats.states==='object'?stats.states.active:undefined);$('active-count').textContent=active??'—';const statuses=stats.by_status||stats.statuses||{};$('candidate-count').textContent=(statuses.candidate||0)+(statuses.unverified||0);const review=stats.last_review||stats.last_review_date||stats.review_date;$('review-date').textContent=typeof review==='object'?(review?.day||review?.date||'尚未复盘'):(review||'尚未复盘')}catch(error){toast(error.message,true);$('result-count').textContent='读取失败'}}
-  function render(){const root=$('results');root.replaceChildren();$('result-count').textContent=`${rows.length} 条记录`;if(!rows.length){root.append(el('div','这里还没有匹配的记忆。\n换个关键词，或记录一件值得延续的事。','empty'));return}for(const r of rows){const item=el('article',undefined,'memory'),main=el('div'),heading=el('div',undefined,'memory-heading');heading.append(el('h3',r.title),el('span',statusNames[r.status]||r.status,'chip '+r.status),el('span',kindNames[r.kind]||r.kind,'chip '+r.kind));if(r.state!=='active')heading.append(el('span',stateNames[r.state]||r.state,'chip'));main.append(heading,el('div',r.content||'正文已清除','memory-content'));main.append(el('div',`${r.scope} · 版本 ${r.revision} · 事件 ${r.event_date||'未注明'}${r.valid_until?' · 截止 '+r.valid_until:''}`,'metadata'));main.append(el('div','来源：'+(r.source||'已清除'),'metadata'));if(r.tags?.length)main.append(el('div','标签：'+r.tags.join(' · '),'metadata'));const actions=el('div',undefined,'memory-actions');if(r.state==='active'){const edit=el('button','修订');edit.addEventListener('click',()=>openEditor(r));const remove=el('button','删除','danger');remove.addEventListener('click',()=>forget(r));actions.append(edit,remove)}item.append(main,actions);root.append(item)}}
+  function render(){const root=$('results');root.replaceChildren();$('result-count').textContent=`${rows.length} 条记录`;if(!rows.length){root.append(el('div','这里还没有匹配的记忆。\n换个关键词，或记录一件值得延续的事。','empty'));return}for(const r of rows){const item=el('article',undefined,'memory'),main=el('div'),heading=el('div',undefined,'memory-heading');heading.append(el('h3',r.title),el('span',statusNames[r.status]||r.status,'chip '+r.status),el('span',kindNames[r.kind]||r.kind,'chip '+r.kind));if(r.state!=='active')heading.append(el('span',stateNames[r.state]||r.state,'chip'));main.append(heading,el('div',r.content||'正文已清除','memory-content'));main.append(el('div',`${r.scope} · 版本 ${r.revision} · 事件 ${r.event_date||'未注明'}${r.valid_until?' · 截止 '+r.valid_until:''}`,'metadata'));main.append(el('div','来源：'+(r.source||'已清除'),'metadata'));if(r.tags?.length)main.append(el('div','标签：'+r.tags.join(' · '),'metadata'));const actions=el('div',undefined,'memory-actions');if(r.state==='active'){const edit=el('button','修订');edit.addEventListener('click',()=>openEditor(r));const remove=el('button','删除','danger');remove.addEventListener('click',()=>forget(r));actions.append(edit,remove)}else if(r.state==='deleted'){const retry=el('button','重试清理学习证据');retry.addEventListener('click',()=>retryForgetCleanup(r,retry));actions.append(retry)}item.append(main,actions);root.append(item)}}
   function openEditor(record){editing=record;$('memory-form').reset();$('editor-error').textContent='';$('editor-title').textContent=record?'修订记忆 · 保留版本脉络':'新增记忆';const form=$('memory-form');for(const name of ['title','kind','status','scope','key','content','source','event_date','valid_until','importance','tags']){const input=form.elements.namedItem(name);if(record)input.value=name==='tags'?(record.tags||[]).join(', '):(record[name]??'')}form.elements.namedItem('key').disabled=!!record;if(!record){const scope=$('scope').value.trim();form.elements.namedItem('scope').value=scope&&scope!=='*'?scope:'global'}$('editor').showModal()}
-  async function forget(record){if(!confirm(`清除“${record.title}”的所有版本正文？\n仅保留删除标记。已有离线备份不会自动删除。`))return;try{await api(`/api/memories/${encodeURIComponent(record.id)}/forget`,{expected_revision:record.revision,reason:'用户通过本地工作台删除'});toast('记忆正文已清除');await refresh()}catch(e){toast(e.message,true);await refresh()}}
+  const pendingForgetCleanups=new Map();
+  function forgetCleanupState(record,result){
+    const pending=result.habit_cleanup?.ok===false;
+    const error_types=pending?Array.from(new Set((result.habit_cleanup.errors||[]).map(e=>e.error_type).filter(x=>typeof x==='string'&&/^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test(x)))):[];
+    return {pending,id:result.id||record.id,revision:result.revision??record.revision,error_types};
+  }
+  function renderForgetCleanups(){
+    const root=$('forget-cleanup-results');root.replaceChildren();$('forget-cleanup-notice').hidden=pendingForgetCleanups.size===0;
+    for(const record of pendingForgetCleanups.values()){
+      const item=el('article',undefined,'memory'),main=el('div'),actions=el('div',undefined,'memory-actions');
+      main.append(el('h3','正文已清除，关联学习证据待重试'));if(record.error_types.length)main.append(el('div','错误类型：'+record.error_types.join('、'),'metadata'));
+      const retry=el('button','重试清理学习证据');retry.onclick=()=>retryForgetCleanup(record,retry);actions.append(retry);item.append(main,actions);root.append(item);
+    }
+  }
+  function noteForgetResult(record,result){
+    const outcome=forgetCleanupState(record,result);
+    if(outcome.pending)pendingForgetCleanups.set(outcome.id,outcome);else pendingForgetCleanups.delete(outcome.id);
+    renderForgetCleanups();
+    toast(outcome.pending?'记忆正文已清除，但学习证据清理尚未完成，请在提示栏重试。':'记忆正文与关联学习证据已清除',outcome.pending);
+  }
+  async function retryForgetCleanup(record,button){
+    if(button)button.disabled=true;
+    try{const result=await api(`/api/memories/${encodeURIComponent(record.id)}/forget`,{expected_revision:record.revision,reason:'用户通过本机工作台重试已删除记忆的学习证据清理'});noteForgetResult(record,result);await refresh()}
+    catch(e){toast('学习证据清理尚未完成，请稍后重试；若记录已变化，请刷新后核对。',true)}
+    finally{if(button)button.disabled=false}
+  }
+  async function forget(record){
+    if(!confirm(`清除“${record.title}”的所有版本正文？\n仅保留删除标记。已有离线备份不会自动删除。`))return;
+    try{const result=await api(`/api/memories/${encodeURIComponent(record.id)}/forget`,{expected_revision:record.revision,reason:'用户通过本地工作台删除'});noteForgetResult(record,result);await refresh()}
+    catch(e){toast(e.message,true);await refresh()}
+  }
   $('memory-form').addEventListener('submit',async event=>{event.preventDefault();const form=$('memory-form'),data={};for(const name of ['title','kind','status','scope','content','source'])data[name]=form.elements.namedItem(name).value.trim();data.event_date=form.elements.namedItem('event_date').value||null;data.valid_until=form.elements.namedItem('valid_until').value||null;data.importance=Number(form.elements.namedItem('importance').value);data.tags=form.elements.namedItem('tags').value.split(/[,，]/).map(x=>x.trim()).filter(Boolean);if(!editing)data.key=form.elements.namedItem('key').value.trim()||null;else data.expected_revision=editing.revision;$('save-memory').disabled=true;try{await api(editing?`/api/memories/${encodeURIComponent(editing.id)}/revise`:'/api/memories',data);$('editor').close();toast(editing?'修订已保存，旧版本不再参与默认接续':'记忆已保存');await refresh()}catch(e){$('editor-error').textContent=e.message+'；若版本已变化，请关闭后刷新重试。'}finally{$('save-memory').disabled=false}});
   $('search-form').addEventListener('submit',e=>{e.preventDefault();refresh()});$('history').addEventListener('change',refresh);$('history-nav').addEventListener('click',()=>{$('history').checked=true;refresh();$('results').scrollIntoView({behavior:'smooth',block:'start'})});$('include-global').addEventListener('change',refresh);$('all-scopes').addEventListener('click',()=>{$('scope').value='*';refresh()});$('new-button').addEventListener('click',()=>openEditor(null));$('cancel-edit').addEventListener('click',()=>$('editor').close());
   for(const [button,path,label] of [['backup-button','/api/backup','备份已保存'],['export-button','/api/export','Markdown 已导出']])$(button).addEventListener('click',async()=>{try{const result=await api(path,{});toast(label+'\n'+result.path+(result.registry_backup?'\n会话台账备份：'+result.registry_backup:''))}catch(e){toast(e.message,true)}});
   $('review-button').addEventListener('click',async()=>{try{await api('/api/review',{note:$('review-note').value.trim()});$('review-note').value='';toast('今日复盘已记录');await refresh()}catch(e){toast(e.message,true)}});
   async function context(){const scope=$('scope').value.trim();const params=new URLSearchParams({q:$('context-query').value});if(scope.startsWith('project:'))params.set('project',scope.slice(8));try{const result=await api('/api/context?'+params);$('context-output').value=result.markdown||JSON.stringify(result,null,2)}catch(e){$('context-output').value=e.message}}
+  let habitPolicy=null,habitPolicyThread=null,habitRefreshSerial=0;
+  const habitLabels={candidate:'待积累',tentative:'待积累',provisional:'待积累',learned:'已积累 · 未确认',supported:'已积累 · 未确认',conflicted:'存在不同选择',confirmed:'你已确认',rejected:'你已拒绝',forgotten:'已遗忘',edited:'已纠正 · 待核对'};
+  async function habitsRefresh(){
+    const serial=++habitRefreshSerial,thread=$('habits-thread').value,params=new URLSearchParams();if(thread)params.set('thread_id',thread);
+    try{
+      const data=await api('/api/habits/status?'+params);if(serial!==habitRefreshSerial)return;habitPolicy=data.policy;habitPolicyThread=thread;
+      $('habits-enabled').checked=!!habitPolicy.enabled;$('habits-use').checked=!!habitPolicy.use_learned;$('habits-tools').checked=!!habitPolicy.allow_tool_assisted;
+      $('habits-policy-note').textContent=(thread?'当前会话（受本机总设置约束）':'本机默认')+'：'+(habitPolicy.enabled?'正在自动发现习惯':'已暂停新增学习')+'；'+(habitPolicy.use_learned?'允许参考已积累的候选习惯。':'已关闭候选习惯的自动参考。');
+      const query=new URLSearchParams({history:$('habits-history').checked?'1':'0',limit:'100'}),scope=$('habits-scope').value.trim();if(scope)query.set('scope',scope);
+      const rows=await api('/api/habits?'+query);if(serial!==habitRefreshSerial)return;const root=$('habits-results');root.replaceChildren();
+      if(!rows.length)root.append(el('div','还没有匹配的习惯记录。开启后，会从之后的真实对话逐步积累，不会把一次要求直接当成长期习惯。','empty'));
+      for(const row of rows){
+        const item=el('article',undefined,'memory'),main=el('div'),actions=el('div',undefined,'memory-actions');
+        main.append(el('h3',row.value||'内容已清除'),el('div',habitLabels[row.state]||row.state||'候选','metadata'));
+        main.append(el('div',(row.scope==='global'?'全局':row.scope)+' · '+(row.evidence_count||0)+' 条证据 · '+(row.thread_count||0)+' 个会话','metadata'));
+        if(typeof row.confidence==='number')main.append(el('div','证据强度 '+Math.round(row.confidence*100)+'%（用于排序，不代表事实概率）','metadata'));
+        const detail=el('details'),summary=el('summary','查看依据');detail.append(summary);let loaded=false;
+        detail.addEventListener('toggle',async()=>{if(!detail.open||loaded)return;try{const full=await api('/api/habits/show?'+new URLSearchParams({habit_id:row.id}));for(const e of full.evidence||[]){detail.append(el('p',e.quote||'','memory-content'),el('div',(e.observed_at||'')+' · '+(e.source||''),'metadata'))}if(!(full.evidence||[]).length)detail.append(el('div','当前没有保留的可展示证据。','metadata'));loaded=true}catch(e){toast(e.message,true)}});
+        main.append(detail);
+        if(row.state!=='forgotten'){
+          const add=(label,action)=>{const b=el('button',label);if(action==='forget')b.className='danger';b.onclick=()=>habitReview(row,action,b);actions.append(b)};
+          if(row.state!=='rejected'){if(row.state!=='confirmed')add('确认为我的偏好','confirm');add('纠正','edit');add('拒绝这项推断','reject')}
+          add('遗忘','forget');
+        }
+        item.append(main,actions);root.append(item);
+      }
+    }catch(e){toast(e.message,true)}
+  }
+  async function habitReview(row,action,button){
+    const body={habit_id:row.id,action,expected_revision:row.revision,confirmed:true,source:'用户在本机习惯学习页面明确点击'+({confirm:'确认偏好',edit:'纠正内容',reject:'拒绝推断',forget:'遗忘该项'}[action])};
+    if(action==='edit'){const value=prompt('请填写修正后的习惯内容；修正后会重新核对依据。',row.value||'');if(value===null)return;if(!value.trim()){toast('修正内容不能为空。',true);return}body.value=value.trim()}
+    if(action==='confirm'&&!confirm('确认把下面这项作为你的明确偏好保存？\n\n'+row.value))return;
+    if(action==='forget'&&!confirm('确认遗忘这项学习内容及其证据？\n\n'+row.value))return;
+    button.disabled=true;try{await api('/api/habits/review',body);toast(action==='confirm'?'已保存为你的明确偏好':'习惯记录已更新');await habitsRefresh();await refresh()}catch(e){toast(e.message+'；请刷新后核对最新记录。',true);await habitsRefresh()}finally{button.disabled=false}
+  }
+  async function habitPolicySave(){
+    if(!habitPolicy||habitPolicyThread!==$('habits-thread').value){await habitsRefresh();return}const body={source:'用户在本机工作台明确调整习惯学习设置',expected_revision:habitPolicy.revision,enabled:$('habits-enabled').checked,use_learned:$('habits-use').checked,allow_tool_assisted:$('habits-tools').checked},thread=$('habits-thread').value;if(thread)body.thread_id=thread;
+    for(const id of ['habits-enabled','habits-use','habits-tools'])$(id).disabled=true;
+    try{await api('/api/habits/configure',body);await habitsRefresh();toast('习惯学习设置已保存')}catch(e){toast(e.message,true);await habitsRefresh()}finally{for(const id of ['habits-enabled','habits-use','habits-tools'])$(id).disabled=false}
+  }
+  $('habits-button').onclick=async()=>{
+    try{const sessions=await api('/api/sessions'),select=$('habits-thread'),current=select.value;select.replaceChildren();const all=el('option','本机默认设置');all.value='';select.append(all);for(const row of sessions){const option=el('option',row.code+' · '+(row.title||'会话'));option.value=row.thread_id;select.append(option)}select.value=current}catch(e){toast('会话列表读取失败，仍可查看本机学习设置。',true)}
+    $('habits-dialog').showModal();await habitsRefresh();
+  };
+  $('habits-thread').onchange=habitsRefresh;$('habits-refresh').onclick=habitsRefresh;$('habits-history').onchange=habitsRefresh;
+  $('habits-filter').onsubmit=e=>{e.preventDefault();habitsRefresh()};$('habits-close').onclick=()=>$('habits-dialog').close();
+  for(const id of ['habits-enabled','habits-use','habits-tools'])$(id).onchange=habitPolicySave;
+  $('habits-clear').onclick=async()=>{if(!confirm('确认清除全部自动学习内容及其证据？你另外保存的明确约定会保留；已有独立备份需另行处理。'))return;const b=$('habits-clear');b.disabled=true;try{const s=await api('/api/habits/status');await api('/api/habits/clear',{source:'用户在本机工作台明确确认清除全部学习内容',expected_revision:s.policy.revision,confirmed:true});toast('学习内容已清除');await habitsRefresh();await refresh()}catch(e){toast(e.message,true)}finally{b.disabled=false}};
   let sessionRows=[];
+  let recyclingPlan=null;
+  function recyclingInvalidate(){recyclingPlan=null;$('session-recycling-reclaim').disabled=true;$('session-recycling-status').textContent='状态可能已有变化，请重新扫描后再释放登记。'}
+  function recyclingCanReclaim(plan){return !!(plan&&plan.enabled===true&&plan.complete===true&&typeof plan.scan_id==='string'&&plan.scan_id&&Array.isArray(plan.releasable)&&plan.releasable.length)}
+  function recyclingRender(plan){
+    recyclingPlan=plan;const root=$('session-recycling-results');root.replaceChildren();$('session-recycling-reclaim').disabled=!recyclingCanReclaim(plan);
+    const available=plan.complete===true&&plan.enabled===true&&plan.next_code;
+    $('session-recycling-status').textContent=plan.complete!==true?'扫描未完成，暂不提供可复用编号，也不会释放登记。':plan.enabled!==true?'编号回收尚未启用；本次仅展示占用检查。':available?'下一个可用编号：'+plan.next_code+'。实际创建时会重新核对占用情况。':'目前没有可分配的编号。';
+    const reasons={A00_reserved:'A00 固定保留',external_host_or_platform:'其他平台或主机尚未核实',existing_main_chat:'会话仍存在（包括归档）',host_title_occupancy:'会话标题占用',directory_occupancy:'工作栈目录占用',project_binding:'仍有关联项目',daily_chat_current:'日常聊天入口正在引用',daily_chat_history:'日常聊天入口历史仍在引用',incomplete_scan:'占用检查未完成'};
+    const releasable=Array.isArray(plan.releasable)?plan.releasable:[],blocked=Array.isArray(plan.blocked)?plan.blocked:[];
+    if(releasable.length){root.append(el('h4','待释放的旧登记'));for(const row of releasable)root.append(el('div',row.code+' · '+row.thread_id+' · 第 '+(row.generation??1)+' 次使用','metadata'))}
+    else root.append(el('p','当前没有可释放的旧登记。','hint'));
+    if(blocked.length){const details=el('details');details.append(el('summary','继续保留的编号（'+blocked.length+'）'));for(const row of blocked){const why=(row.reasons||[]).map(reason=>typeof reason==='string'?(reasons[reason]||reason):String(reason.reason||reason.type||'待核实'));details.append(el('div',row.code+' · '+why.join('、'),'metadata'))}root.append(details)}
+    const scanErrors={host_inventory_unavailable:'无法完整读取会话清单',workspace_roots_not_configured:'尚未设置工作栈范围',workspace_root_unavailable:'工作栈位置不可读取',workspace_directory_unreadable:'部分目录不可读取',workspace_changed_during_scan:'扫描期间目录发生变化',workspace_link_target_unverified:'目录链接的目标尚未核实',unknown_thread_class:'部分会话类型尚未核实',unknown_thread_origin:'部分会话来源尚未核实'};
+    for(const error of plan.occupancy?.errors||[]){const kind=typeof error==='string'?error:(error.kind||'');root.append(el('div','待核对：'+(scanErrors[kind]||'部分位置或配置尚未完整核实')+(error.path?' · '+error.path:''),'metadata'))}
+  }
+  async function recyclingRefresh(){
+    const button=$('session-recycling-scan');button.disabled=true;recyclingPlan=null;$('session-recycling-reclaim').disabled=true;$('session-recycling-status').textContent='正在核对会话、归档与工作栈目录…';
+    try{recyclingRender(await api('/api/session-recycling'))}catch(error){$('session-recycling-results').replaceChildren();$('session-recycling-status').textContent='读取失败；请重新扫描。';toast(error.message,true)}finally{button.disabled=false}
+  }
+  async function recyclingHistory(){
+    const code=$('session-recycling-history-code').value.trim(),root=$('session-recycling-history');root.replaceChildren();
+    try{const params=new URLSearchParams();if(code)params.set('code',code);const history=await api('/api/session-recycling/history?'+params);if(!history.length){root.append(el('p','没有符合条件的历史使用记录。','hint'));return}for(const row of history){const item=el('article',undefined,'memory'),main=el('div');main.append(el('h4',row.code+' · 第 '+(row.generation??1)+' 次使用'),el('div',row.title||'未记录标题','memory-content'),el('div',row.thread_id+' · '+(row.archived_at||row.released_at||row.retired_at||''),'metadata'));const detail=el('details');detail.append(el('summary','查看登记历史'));for(const event of row.events||[])detail.append(el('div',(event.at||'')+' · '+(event.operation||'')+' · '+(event.source||''),'metadata'));main.append(detail);item.append(main);root.append(item)}}catch(error){root.append(el('p','历史读取失败。','hint'));toast(error.message,true)}
+  }
+  $('session-recycling-scan').onclick=recyclingRefresh;
+  $('session-recycling-history-form').onsubmit=event=>{event.preventDefault();recyclingHistory()};
+  $('session-recycling-reclaim').onclick=async()=>{
+    const plan=recyclingPlan;if(!recyclingCanReclaim(plan))return;
+    const codes=plan.releasable.map(row=>row.code).join('、');
+    if(!confirm('确认释放下列旧登记，使编号可供新会话复用？\n\n'+codes+'\n\n保留历史记录；不会删除任何会话或文件。'))return;
+    $('session-recycling-reclaim').disabled=true;$('session-recycling-scan').disabled=true;
+    try{const result=await api('/api/session-recycling/reclaim',{expected_scan_id:plan.scan_id,source:'用户在本机编号回收页面明确确认当前扫描清单：'+codes,confirmed:true});recyclingRender(result.scan);toast('已释放 '+result.released.length+' 个旧登记，历史记录仍可查询。');await sessionsRefresh();await recyclingHistory()}catch(error){recyclingInvalidate();$('session-recycling-results').replaceChildren();toast(error.message+'；请重新扫描核对。',true)}finally{$('session-recycling-scan').disabled=false}
+  };
   async function dailyChatRefresh(){
     let panel=$('daily-chat-entry');
     if(!panel){panel=el('section',undefined,'panel');panel.id='daily-chat-entry';panel.style.margin='16px 0';panel.setAttribute('aria-label','日常聊天专用入口');$('sessions-search').before(panel)}
@@ -93,8 +222,8 @@
   $('sessions-button').addEventListener('click',dailyChatRefresh);
   $('sessions-search').onsubmit=e=>{e.preventDefault();dailyChatRefresh();sessionsRefresh()};$('sessions-close').onclick=()=>$('sessions-dialog').close();
   $('sessions-export').onclick=async()=>{try{const result=await api('/api/session-update',{operation:'export'});toast('对应文件已更新');$('sessions-notice').textContent=result.files.join('\n')}catch(e){toast(e.message,true)}};
-  $('session-register-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,body={operation:'ensure'};for(const k of ['platform','host','thread_id','title','source'])body[k]=form.elements.namedItem(k).value.trim();try{const result=await api('/api/session-update',body);if(sessionSyncNotice(result))toast('会话编号：'+result.code);$('sessions-query').value='';await sessionsRefresh()}catch(e){toast(e.message,true)}};
-  $('session-bind-form').onsubmit=async e=>{e.preventDefault();const code=$('session-bind-code').value,project=$('session-bind-project').value,row=sessionRows.find(r=>r.code===code);if(!row||!project){toast('请选择会话和项目',true);return}try{const result=await api('/api/session-update',{operation:'bind',code,project,expected_revision:row.revision,source:'用户在本机工作台明确选择已核实项目与会话的关联'});if(sessionSyncNotice(result))toast('目录关联已保存');await sessionsRefresh()}catch(e){toast(e.message,true);await sessionsRefresh()}};
+  $('session-register-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,body={operation:'ensure'};for(const k of ['platform','host','thread_id','title','source'])body[k]=form.elements.namedItem(k).value.trim();try{const result=await api('/api/session-update',body);if(sessionSyncNotice(result))toast('会话编号：'+result.code);recyclingInvalidate();$('sessions-query').value='';await sessionsRefresh()}catch(e){toast(e.message,true)}};
+  $('session-bind-form').onsubmit=async e=>{e.preventDefault();const code=$('session-bind-code').value,project=$('session-bind-project').value,row=sessionRows.find(r=>r.code===code);if(!row||!project){toast('请选择会话和项目',true);return}try{const result=await api('/api/session-update',{operation:'bind',code,project,expected_revision:row.revision,source:'用户在本机工作台明确选择已核实项目与会话的关联'});if(sessionSyncNotice(result))toast('目录关联已保存');recyclingInvalidate();await sessionsRefresh()}catch(e){toast(e.message,true);await sessionsRefresh()}};
   async function projectSummary(){const project=$('summary-project').value;if(!project)return;try{const result=await api('/api/project-summary?'+new URLSearchParams({project}));$('summary-output').value=result[$('summary-view').value];$('summary-files').textContent=result.files.join('\n')}catch(e){$('summary-output').value=e.message}}
   $('summary-button').onclick=async()=>{try{const projects=await api('/api/projects'),select=$('summary-project');select.replaceChildren();for(const p of projects){const option=el('option',p.title);option.value=p.project;select.append(option)}$('summary-dialog').showModal();if(!projects.length){$('summary-output').value='尚未登记项目。首次实际协作时，由助手绑定原项目目录并生成总结。';$('summary-files').textContent=''}else await projectSummary()}catch(e){toast(e.message,true)}};
   $('summary-project').onchange=projectSummary;$('summary-view').onchange=projectSummary;$('summary-refresh').onclick=projectSummary;$('summary-close').onclick=()=>$('summary-dialog').close();

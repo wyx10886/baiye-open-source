@@ -340,14 +340,41 @@ class Store:
             row = con.execute("SELECT * FROM memories WHERE id=?", (memory_id,)).fetchone()
             if row is None:
                 raise ValidationError("Memory not found")
-            if type(expected_revision) is not int or row["revision"] != expected_revision or row["state"] != "active":
+            if (type(expected_revision) is not int or row["revision"] != expected_revision
+                    or row["state"] not in {"active", "deleted"}):
                 raise ConflictError("Memory changed; reload its current version before deleting")
             con.execute("UPDATE memories SET state='deleted',title='[已删除]',content='',source='',tags='[]',"
                         "key=NULL,updated_at=? WHERE root_id=?", (now(),row["root_id"]))
             self._audit(con, "forget", memory_id)
+            if (self.home / "habits.sqlite3").is_file():
+                self._audit(con, "habit-forget-pending", row["root_id"])
         with self._connect() as con:
             con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        return self.get(memory_id)
+        cleanup = self._complete_habit_forgets()
+        result = self.get(memory_id)
+        if cleanup:
+            result["habit_cleanup"] = {"ok": False, "retryable": True, "errors": cleanup}
+        return result
+
+    def _complete_habit_forgets(self):
+        """Retry content-free pending cross-store cleanup without holding a DB transaction."""
+        if not (self.home / "habits.sqlite3").is_file():
+            return []
+        with self._connect() as con:
+            pending = con.execute(
+                "SELECT memory_id FROM audit WHERE action IN ('habit-forget-pending','habit-forget-done') "
+                "GROUP BY memory_id HAVING MAX(CASE WHEN action='habit-forget-pending' THEN seq ELSE 0 END) "
+                "> MAX(CASE WHEN action='habit-forget-done' THEN seq ELSE 0 END)").fetchall()
+        errors = []
+        for row in pending:
+            try:
+                from .habits import HabitLearning
+                HabitLearning(self.home).forget_linked(row["memory_id"])
+                with self._connect() as con:
+                    self._audit(con, "habit-forget-done", row["memory_id"])
+            except Exception as exc:
+                errors.append({"root_id": row["memory_id"], "error_type": type(exc).__name__})
+        return errors
 
     def list_memories(self, *, scope=None, include_inactive=False, status=None, kind=None, limit=200):
         clauses, args = [], []
@@ -397,7 +424,8 @@ class Store:
         rows.sort(key=lambda r:(r["score"],r["updated_at"]),reverse=True)
         return rows[:limit]
 
-    def context(self, query="", *, project=None, budget=6000, include_persona=False):
+    def context(self, query="", *, project=None, budget=6000, include_persona=False,
+                thread_id=None, include_learned=True):
         if type(budget) is not int or not 200 <= budget <= 30000:
             raise ValidationError("budget must be between 200 and 30000 characters")
         scope = _scope("project:" + project if project and not project.startswith("project:") else project or "global")
@@ -439,7 +467,27 @@ class Store:
                 if used + len(block) > budget:
                     continue
                 parts.append(block); used += len(block); bucket.append(item)
-        return {"confirmed":chosen,"candidates":pending,"markdown":"".join(parts),"scope":scope}
+        learned, learning_error = [], None
+        remaining = budget - used
+        if include_learned and thread_id and remaining >= 200 and (self.home / "habits.sqlite3").is_file():
+            try:
+                if self._complete_habit_forgets():
+                    raise ValidationError("Pending habit forgetting must finish before learned context is reused")
+                from .habits import HabitLearning
+                result = HabitLearning(self.home).context(query, project=project, thread_id=thread_id,
+                    budget=min(1500, remaining))
+                block = result.get("markdown", "")
+                if isinstance(block, str) and len(block) <= remaining:
+                    parts.append(block)
+                    learned = result.get("items", [])
+            except Exception as exc:
+                # The primary confirmed memory remains usable; no private exception text is emitted.
+                learning_error = type(exc).__name__
+        result = {"confirmed":chosen,"candidates":pending,"learned_habits":learned,
+                  "markdown":"".join(parts),"scope":scope}
+        if learning_error:
+            result["learning_error"] = learning_error
+        return result
 
     def stats(self):
         with self._connect() as con:
@@ -536,11 +584,14 @@ class Store:
                 if row["memory_id"] not in records:
                     raise ValidationError("Backup request refers to a missing memory")
             for row in source.execute("SELECT * FROM audit"):
-                if type(row["seq"]) is not int or row["seq"] < 1 or row["action"] not in {"remember", "revise", "forget", "review", "restore"}:
+                if type(row["seq"]) is not int or row["seq"] < 1 or row["action"] not in {"remember", "revise", "forget", "review", "restore", "habit-forget-pending", "habit-forget-done"}:
                     raise ValidationError("Invalid backup audit metadata")
                 if row["action"] in {"remember", "revise", "forget"}:
                     if row["memory_id"] not in records:
                         raise ValidationError("Backup audit refers to a missing memory")
+                elif row["action"] in {"habit-forget-pending", "habit-forget-done"}:
+                    if row["memory_id"] not in roots:
+                        raise ValidationError("Backup habit cleanup refers to a missing memory root")
                 elif row["memory_id"] is not None:
                     raise ValidationError("Invalid backup audit reference")
                 _timestamp(row["at"])
@@ -565,13 +616,25 @@ class Store:
         try:
             with _sqlite(target.as_uri()+"?mode=ro",uri=True) as source:
                 self._validate_backup(source)
+                if self._complete_habit_forgets():
+                    raise ConflictError("Finish pending habit forgetting before restoring a snapshot")
                 safety = self.backup()
                 with self._connect() as dest:
                     source.backup(dest)
                     self._audit(dest,"restore")
         except sqlite3.Error as exc:
             raise ValidationError(f"Invalid or locked SQLite backup: {exc}") from None
-        return {"restored_from":str(target),"safety_backup":safety}
+        suppressed = []
+        if (self.home / "habits.sqlite3").is_file():
+            from .habits import HabitLearning
+            suppressed = HabitLearning(self.home).suppressed_memory_roots()
+            if suppressed:
+                with self._connect() as con:
+                    con.executemany("UPDATE memories SET state='deleted',title='[已删除]',content='',"
+                        "source='',tags='[]',key=NULL,updated_at=? WHERE root_id=?",
+                        [(now(), root_id) for root_id in suppressed])
+        return {"restored_from":str(target),"safety_backup":safety,
+                "forgotten_habit_roots_preserved":len(suppressed)}
 
     @_serialized()
     def export_markdown(self, target=None):

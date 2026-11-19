@@ -33,14 +33,14 @@ class ImportTests(unittest.TestCase):
 
     def test_json_curated_status_and_scope(self):
         path = self.write("curated.json", json.dumps([
-            {"kind": "preference", "key": "format", "title": "格式偏好", "content": "结果使用简洁列表",
+            {"kind": "preference", "key": "address", "title": "称呼", "content": "结果使用简洁列表",
              "status": "confirmed", "source": "explicit user statement"},
             {"title": "研究候选", "content": "候选方向还未采用", "status": "candidate", "scope": "project:research"}
         ], ensure_ascii=False))
         result = import_file(self.store, path, format="json", source="curated notes")
         self.assertEqual(result["imported"], 2)
         self.assertFalse(result["errors"])
-        self.assertEqual(len(self.store.search("格式偏好")), 1)
+        self.assertEqual(len(self.store.search("称呼")), 1)
         self.assertEqual(len(self.store.search("研究候选", scope="project:research", statuses=["candidate"])), 1)
 
     def test_reimport_cannot_revive_obsolete_or_deleted_text(self):

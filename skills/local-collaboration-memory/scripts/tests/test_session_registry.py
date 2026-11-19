@@ -1,10 +1,13 @@
+import uuid
 """Stable codes: carry boundaries, native identity, provenance and real interfaces."""
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 import http.client
 import json
 from pathlib import Path
 import subprocess
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -12,9 +15,11 @@ import unittest
 from unittest.mock import patch
 
 from local_memory.integration import handle_hook
+from local_memory.daily_chat import DailyChat
 from local_memory.mcp import MCPServer
 from local_memory.retention import Retention
 from local_memory.session_registry import SessionRegistry, MARKER_FILE
+from local_memory.session_registry import dispatch_registry
 from local_memory.store import Store, ValidationError, ConflictError
 from local_memory.web import make_server
 from local_memory.work_summary import WorkSummary
@@ -38,11 +43,27 @@ class SessionRegistryTests(unittest.TestCase):
             "coverage": "fixture only"}, source="actual fixture directory")
         return path
 
+    def verified_local_native(self):
+        native = str(uuid.UUID(int=55, version=4))
+        host = self.root / "fixture-host"
+        host.mkdir(exist_ok=True)
+        with closing(sqlite3.connect(host / "state_5.sqlite")) as con, con:
+            con.execute("CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, source TEXT, thread_source TEXT)")
+            con.execute("INSERT OR REPLACE INTO threads VALUES(?,?,?)", (native, "vscode", "user"))
+        (self.home / "settings.json").write_text(json.dumps({"host_title_sync":{"codex_home":str(host)}}), encoding="utf-8")
+        return native
+
     def ensure(self, thread_id="native-1", **kwargs):
         return self.registry.ensure(thread_id=thread_id, source="actual fixture host identity", **kwargs)
 
     def bind(self, code, project):
         return self.registry.bind(code=code, project=project, expected_revision=self.registry.show(code)["revision"], source="fixture inspected messages and artifact directory")
+
+    def registry_snapshot(self):
+        with self.registry._connect() as con:
+            tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            return {name: [tuple(r) for r in con.execute("SELECT * FROM " + name + " ORDER BY rowid")]
+                    for name in ("sessions", "retired_sessions", "bindings", "events", "sqlite_sequence", "daily_chat", "daily_chat_events") if name in tables}
 
     def test_decimal_and_letter_carry_boundaries_and_roundtrip(self):
         examples = {1:"A00", 2:"A01", 100:"A99", 101:"B00", 2600:"Z99", 2601:"AA00",
@@ -75,6 +96,116 @@ class SessionRegistryTests(unittest.TestCase):
             same = list(pool.map(lambda _: self.ensure("shared-id")["code"], range(12)))
         self.assertEqual(len(set(same)), 1)
         self.assertEqual(len(self.registry.list()), 21)
+
+    def test_retirement_removes_only_target_and_preserves_history_and_sequence(self):
+        original = self.ensure("retired-native", title="approved erroneous fixture")
+        self.ensure("kept-native", title="keep this fixture")
+        kept = self.registry.show("A01")
+        result = dispatch_registry(self.store, operation="retire", code="A00",
+            source="User approved removing this exact erroneous fixture after dependency checks", expected_revision=1)
+        self.assertTrue(result["retired"])
+        self.assertEqual([r["code"] for r in self.registry.list()], ["A01"])
+        archived = self.registry.show("A00")
+        self.assertTrue(archived["retired"])
+        for field in ("seq", "thread_id", "title", "source", "revision", "created_at", "updated_at"):
+            self.assertEqual(archived[field], original[field])
+        self.assertEqual(archived["retirement_revision"], 2)
+        self.assertEqual(self.registry.show(thread_id="retired-native")["code"], "A00")
+        self.assertEqual(self.registry.show("A01"), kept)
+        with self.assertRaises(ValidationError):
+            self.ensure("retired-native")
+        self.assertEqual(self.ensure("next-native")["code"], "A02")
+        with self.registry._connect() as con:
+            self.assertEqual([r[0] for r in con.execute("SELECT operation FROM events WHERE session_seq=1 ORDER BY id")], ["allocate", "retire"])
+            self.assertEqual(con.execute("PRAGMA foreign_key_check").fetchall(), [])
+        index = (self.home / "会话与目录索引.md").read_text(encoding="utf-8")
+        self.assertNotIn("| A00 |", index)
+        self.assertIn("| A01 |", index)
+
+    def test_retirement_requires_current_revision_without_any_change(self):
+        self.ensure()
+        before = self.registry_snapshot()
+        with self.assertRaises(ConflictError):
+            self.registry.retire(code="A00", source="approved exact fixture", expected_revision=0)
+        self.assertEqual(self.registry_snapshot(), before)
+
+    def test_retirement_rejects_directory_dependencies_without_any_change(self):
+        self.project("linked")
+        self.ensure()
+        row = self.bind("A00", "linked")
+        before = self.registry_snapshot()
+        with self.assertRaises(ConflictError):
+            self.registry.retire(code="A00", source="approved exact fixture", expected_revision=row["revision"])
+        self.assertEqual(self.registry_snapshot(), before)
+
+    def test_retirement_rejects_current_daily_entry_without_any_change(self):
+        self.ensure()
+        daily = DailyChat(self.store)
+        daily.bind(thread_id="native-1", title="fixture entry", source="explicit fixture choice", expected_revision=0)
+        before = self.registry_snapshot()
+        with self.assertRaises(ConflictError):
+            self.registry.retire(code="A00", source="approved exact fixture", expected_revision=1)
+        self.assertEqual(self.registry_snapshot(), before)
+        self.assertEqual(daily.show()["current_session"]["code"], "A00")
+
+    def test_retirement_rejects_historical_daily_entry_without_any_change(self):
+        self.ensure()
+        self.ensure("next-native")
+        daily = DailyChat(self.store)
+        daily.bind(thread_id="native-1", title="fixture entry", source="explicit fixture choice", expected_revision=0)
+        daily.bind(thread_id="next-native", title="fixture entry", source="explicit fixture choice", expected_revision=1)
+        before = self.registry_snapshot()
+        with self.assertRaises(ConflictError):
+            self.registry.retire(code="A00", source="approved exact fixture", expected_revision=1)
+        self.assertEqual(self.registry_snapshot(), before)
+        self.assertEqual(daily.show()["current_session"]["code"], "A01")
+
+    def test_retirement_failure_after_archival_insert_rolls_back_the_whole_transaction(self):
+        self.ensure()
+        with self.registry._connect() as con:
+            con.execute("CREATE TRIGGER fixture_block_delete BEFORE DELETE ON sessions BEGIN SELECT RAISE(ABORT,'fixture failure'); END")
+        before = self.registry_snapshot()
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.registry.retire(code="A00", source="approved exact fixture", expected_revision=1)
+        self.assertEqual(self.registry_snapshot(), before)
+
+    def test_old_client_cannot_reinsert_a_retired_identity_or_explicitly_reuse_its_number(self):
+        self.ensure()
+        self.registry.retire(code="A00", source="approved exact fixture", expected_revision=1)
+        before = self.registry_snapshot()
+        for sql, args in [
+            ("INSERT INTO sessions(platform,host,thread_id,title,source,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+             ("codex", "local", "native-1", "", "old client fixture", "fixture", "fixture")),
+            ("INSERT INTO sessions(seq,platform,host,thread_id,title,source,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+             (1, "codex", "local", "different-native", "", "old client fixture", "fixture", "fixture")),
+        ]:
+            with self.assertRaises(sqlite3.IntegrityError):
+                with self.registry._connect() as con:
+                    con.execute(sql, args)
+        self.assertEqual(self.registry_snapshot(), before)
+        self.assertEqual(self.ensure("next-native")["code"], "A01")
+        with self.assertRaises(ValidationError):
+            self.registry.title_plan(code="A00", title="do not rename")
+        with self.assertRaises(ValidationError):
+            self.registry.directory_plan(code="A00", parent=str(self.root), name="do not bind")
+
+    def test_legacy_schema_upgrades_without_resetting_number_or_identity_history(self):
+        home = self.root / "legacy-private"
+        store = Store(home)
+        with closing(sqlite3.connect(home / "session-registry.sqlite3")) as con, con:
+            con.execute("""CREATE TABLE sessions (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT NOT NULL, host TEXT NOT NULL,
+                thread_id TEXT NOT NULL, title TEXT NOT NULL, source TEXT NOT NULL,
+                revision INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                UNIQUE(platform,host,thread_id))""")
+            con.execute("INSERT INTO sessions(platform,host,thread_id,title,source,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+                        ("codex", "local", "legacy-id", "legacy fixture", "legacy source", "fixture", "fixture"))
+        registry = SessionRegistry(store)
+        result = registry.retire(code="A00", source="approved exact legacy fixture", expected_revision=1)
+        self.assertEqual(result["title"], "legacy fixture")
+        self.assertEqual(result["source"], "legacy source")
+        self.assertTrue(result["retired"])
+        self.assertEqual(registry.ensure(thread_id="next-legacy", source="verified fixture")["code"], "A01")
 
     def test_title_plan_is_reversible_and_observation_requires_revision(self):
         row = self.ensure(title="原来的自由标题")
@@ -191,14 +322,15 @@ class SessionRegistryTests(unittest.TestCase):
             self.registry.directory_plan(code="A00", parent=str(self.home), name="private")
 
     def test_cli_and_mcp_reach_same_registry(self):
+        native = self.verified_local_native()
         process = subprocess.run([sys.executable, "-X", "utf8", "-B", "entry.py", "--home", str(self.home), "session", "update", "--input", "-"],
-            input=json.dumps({"operation":"ensure", "thread_id":"cli", "source":"fixture"}), capture_output=True, text=True, encoding="utf-8")
+            input=json.dumps({"operation":"ensure", "thread_id":native, "source":"fixture"}), capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(process.returncode, 0, process.stderr)
         self.assertEqual(json.loads(process.stdout)["code"], "A00")
         server = MCPServer(self.store)
         r = server.handle({"jsonrpc":"2.0", "id":1, "method":"tools/call", "params":{"name":"local_session_lookup", "arguments":{"code":"A00"}}})
         self.assertFalse(r["result"]["isError"])
-        self.assertEqual(json.loads(r["result"]["content"][0]["text"])["thread_id"], "cli")
+        self.assertEqual(json.loads(r["result"]["content"][0]["text"])["thread_id"], native)
         bad = server.handle({"jsonrpc":"2.0", "id":2, "method":"tools/call", "params":{"name":"local_session_update", "arguments":{"operation":"ensure", "thread_id":"test", "source":"fixture", "code":"A00"}}})
         self.assertTrue(bad["result"]["isError"])
 
@@ -219,7 +351,8 @@ class SessionRegistryTests(unittest.TestCase):
             return status,data
         try:
             self.assertEqual(request("GET","/api/sessions",token=False)[0],403)
-            code,data=request("POST","/api/session-update",{"operation":"ensure","thread_id":"web","source":"fixture"})
+            native = self.verified_local_native()
+            code,data=request("POST","/api/session-update",{"operation":"ensure","thread_id":native,"source":"fixture"})
             self.assertEqual(code,200)
             self.assertEqual(data["data"]["code"],"A00")
             status,data=request("GET","/api/sessions?q=A00")

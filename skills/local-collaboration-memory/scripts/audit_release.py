@@ -88,7 +88,8 @@ def scan(files, forbidden):
 
 
 def manifest_for(files):
-    return {"schema": 1, "skill": "local-collaboration-memory", "version": "1.0.1",
+    return {"schema": 1, "skill": "local-collaboration-memory", "version": "1.1.0",
+            "runtime_baseline": "1.7.2", "release_date": "2026-11-19",
             "scope": "Reviewed UTF-8 source only; manifest excluded from its own hashes",
             "files": [{"path": path, "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
                       for path, raw in sorted(files.items())]}

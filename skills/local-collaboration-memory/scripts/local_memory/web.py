@@ -112,9 +112,31 @@ class MemoryHandler(BaseHTTPRequestHandler):
             return
         params = parse_qs(url.query, keep_blank_values=True)
         one = lambda name, default="": params.get(name, [default])[0]
+        if url.path in {"/api/habits", "/api/habits/status", "/api/habits/show"}:
+            from .cli import dispatch_habit_operation
+            def habits_read():
+                if url.path == "/api/habits/status":
+                    fields = {"thread_id": one("thread_id")} if one("thread_id") else {}
+                    return dispatch_habit_operation(self.server.store.home, "status", **fields)
+                if url.path == "/api/habits/show":
+                    return dispatch_habit_operation(self.server.store.home, "show", habit_id=one("habit_id"))
+                fields = {"include_inactive": one("history") == "1", "limit": int(one("limit", "100"))}
+                if one("scope"):
+                    fields["scope"] = one("scope")
+                return dispatch_habit_operation(self.server.store.home, "list", **fields)
+            return self._run(habits_read)
         if url.path == "/api/daily-chat":
             from .daily_chat import DailyChat
             return self._run(lambda: DailyChat(self.server.store).show())
+        if url.path in {"/api/session-recycling", "/api/session-recycling/history"}:
+            from .cli import dispatch_session_recycling
+            def recycling_read():
+                operation = "scan" if url.path == "/api/session-recycling" else "history"
+                if any(len(values) != 1 for values in params.values()):
+                    raise ValidationError("Session recycling query fields must be unique")
+                return dispatch_session_recycling(self.server.store.home, operation,
+                                                  **{key: values[0] for key, values in params.items()})
+            return self._run(recycling_read)
         if url.path == "/api/sessions":
             from .session_registry import SessionRegistry
             registry = SessionRegistry(self.server.store)
@@ -155,7 +177,7 @@ class MemoryHandler(BaseHTTPRequestHandler):
             return self._run(memories)
         if url.path == "/api/context":
             project = one("project") or None
-            return self._run(lambda: self.server.store.context(one("q"), project=project, include_persona=one("persona") == "1"))
+            return self._run(lambda: self.server.store.context(one("q"), project=project, include_persona=one("persona") == "1", thread_id=one("thread_id") or None))
         self._send(HTTPStatus.NOT_FOUND, {"ok": False, "error": "页面不存在"})
 
     def do_POST(self):
@@ -165,9 +187,18 @@ class MemoryHandler(BaseHTTPRequestHandler):
         def action():
             body = self._json_body()
             store = self.server.store
+            if url.path.startswith("/api/habits/"):
+                from .cli import dispatch_habit_operation
+                operation = url.path.rsplit("/", 1)[-1]
+                if operation not in {"configure", "review", "clear"}:
+                    raise ValidationError("不支持的习惯学习操作")
+                return dispatch_habit_operation(store.home, operation, **body)
             if url.path == "/api/daily-chat":
                 from .daily_chat import DailyChat
                 return DailyChat(store).bind(**body)
+            if url.path == "/api/session-recycling/reclaim":
+                from .cli import dispatch_session_recycling
+                return dispatch_session_recycling(store.home, "reclaim", **body)
             if url.path == "/api/session-update":
                 from .session_registry import dispatch_registry
                 return dispatch_registry(store, **body)

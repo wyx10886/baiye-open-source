@@ -1,3 +1,4 @@
+import uuid
 """Regression coverage for automatic titles, not just registry suggestions."""
 import io
 from contextlib import closing
@@ -43,7 +44,7 @@ class TitleSyncTests(unittest.TestCase):
         self.home = Path(self.temp.name) / "private"
         self.store = Store(self.home)
         self.registry = SessionRegistry(self.store)
-        self.native_id = "00000000-0000-4000-8000-000000000001"
+        self.native_id = str(uuid.UUID(int=1, version=4))
         self.row = self.registry.ensure(thread_id=self.native_id, source="fixture native identity")
         self.settings = {"host_title_sync": {"enabled": True, "binary": sys.executable,
                                               "codex_home": str(Path(self.temp.name) / "codex")}}
@@ -83,6 +84,13 @@ class TitleSyncTests(unittest.TestCase):
         self.sync(client)
         self.assertEqual(client.title, "[A00] 新名字")
         self.assertEqual(len(self.registry.list()), 1)
+
+    def test_retired_registration_is_never_sent_to_the_host_for_renaming(self):
+        self.registry.retire(code="A00", source="User approved exact erroneous fixture", expected_revision=1)
+        with patch("local_memory.title_sync.TitleClient") as factory:
+            result = synchronize(self.home, self.row, source="historical fixture retry")
+        self.assertEqual(result["status"], "retired")
+        factory.assert_not_called()
 
     def test_title_changed_between_reads_keeps_latest_free_name(self):
         client = FakeClient("旧名字")

@@ -57,7 +57,8 @@ class IntegrationPreservationTests(unittest.TestCase):
         self.home.mkdir()
         settings = {"host_title_sync": {"enabled": True, "binary": "chosen-codex",
                     "codex_home": "chosen-home", "timeout_seconds": 9},
-                    "projects": [{"slug": "synthetic-project", "aliases": ["Example project"]}]}
+                    "projects": [{"slug": "synthetic-project", "aliases": ["Example project"]}],
+                    "session_recycling": {"enabled": True, "workspace_roots": ["chosen-workspace"]}}
         path = self.home / "settings.json"
         path.write_text(json.dumps(settings), encoding="utf-8")
         install(self.home, self.codex)

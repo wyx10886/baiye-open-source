@@ -48,6 +48,10 @@ Show the exact current proposal to the user. Only after explicit confirmation of
 
 ## Backup, export and removal
 
-`backup` snapshots memory SQLite. `session backup` snapshots the independent registry, including the daily-chat entry. `export` generates readable Markdown with the current 10,000-record projection bound. A full deployment also includes retention state/recycle contents, settings and integration backups; copy a quiescent private home for a complete migration, not just the Markdown projection.
+`backup` snapshots memory SQLite. `session backup` snapshots the independent registry, including the daily-chat entry. Neither command includes the independent habits/proactive databases. `export` generates readable Markdown with the current 10,000-record projection bound. A full deployment also includes retention state/recycle contents, settings and integration backups; copy a quiescent private home for a complete migration, not just the Markdown projection.
 
 `restore <backup-path>` changes memory state and first creates a safety snapshot. Test it in an isolated home, pause all other writers and retain the independent registry. `forget <id> --expected-revision <n>` removes the active revision-chain text from the live memory database; old backups, assistant history and previously exported files may still contain it and must be considered separately.
+
+## Optional learning, preparation and code reuse
+
+Read [optional features](optional-features.md) for opt-in policy examples, receipt-bound observations and safe code recycling. Code reuse is distinct from processing-record file recycling: the former archives registration generations, while the latter moves only explicitly confirmed files.
